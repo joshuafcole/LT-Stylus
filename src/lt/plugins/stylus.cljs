@@ -8,10 +8,10 @@
             [lt.objs.plugins :as plugins])
   (:require-macros [lt.macros :refer [behavior defui]]))
 
-(def root-dir (plugins/find-plugin "Stylus"))
+(def root-dir (plugins/find-plugin "Stylus Language"))
 ;; Require the cm-mode. We require it so that __dirname will be local (rather than nw-global) within the cm-stylus module.
 (js/require (files/join root-dir "codemirror" "stylus"))
-(def stylus (js/require (plugins/local-module "Stylus" "stylus")))
+(def stylus (js/require (plugins/local-module "Stylus Language" "stylus")))
 
 (behavior ::on-eval
           :triggers #{:eval

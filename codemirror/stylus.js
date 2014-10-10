@@ -106,6 +106,7 @@
       startState: function(base) {
         return {
           indent: base || 0,
+          multiComment: false,
           lexer: new Lexer('')
         };
       },
@@ -123,6 +124,7 @@
 
         return {
           indent: state.indent || 0,
+          multiComment: state.multiComment,
           lexer: nl
         };
       },
@@ -143,6 +145,32 @@
           state.lexer.setString(buf);
         } else {
           buf = state.lexer.str;
+        }
+
+        // Handle multiline comments for the lexer.
+        var startMultiComment = buf.indexOf('/*');
+        if(state.multiComment || startMultiComment === 0) {
+          state.multiComment = true;
+          var endMultiComment = buf.indexOf('*/');
+          if(endMultiComment === -1) {
+            stream.skipToEnd();
+          } else {
+            // Catch end of comment as well.
+            endMultiComment += 2;
+            state.multiComment = false;
+            stream.match(/.*\*\//, true);
+          }
+
+          // This buffer is trashed, refetch it next token.
+          state.lexer.setString('');
+          return 'comment';
+        }
+
+        // Handle single line comments for the lexer.
+        if(buf.indexOf('//') === 0) {
+          state.lexer.setString('');
+          stream.skipToEnd();
+          return 'comment';
         }
 
         var tok = state.lexer.next();
@@ -196,33 +224,8 @@
     };
   });
 
-  function tokenCComment(stream, state) {
-    var maybeEnd = false, ch;
-    while ((ch = stream.next()) !== null) {
-      if (maybeEnd && ch === "/") {
-        state.tokenize = null;
-        break;
-      }
-      maybeEnd = (ch === "*");
-    }
-    return ["comment", "comment"];
-  }
-
   CodeMirror.defineMIME("text/x-styl", {
     allowNested: true,
-    tokenHooks: {
-      "/": function(stream, state) {
-        if (stream.eat("/")) {
-          stream.skipToEnd();
-          return ["comment", "comment"];
-        } else if (stream.eat("*")) {
-          state.tokenize = tokenCComment;
-          return tokenCComment(stream, state);
-        } else {
-          return ["operator", "operator"];
-        }
-      }
-    },
     name: "stylus"
   });
 });

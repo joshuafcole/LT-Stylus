@@ -13,24 +13,6 @@
 (js/require (files/join root-dir "codemirror" "stylus"))
 (def stylus (js/require (plugins/local-module "Stylus" "stylus")))
 
-(def relative-url-pattern
-  (re-pattern (str "(?m)[uU][rR][lL]\\(" ; Matches all capitalizations of 'url('
-                   "[\"']?"              ; Matches single, double, or no quotation mark
-                   "(?!.*?:\\/\\/)"      ; Skips URLs prefixed by a protocol
-                   "([^\\/\"']"          ; Skips URLs prefixed by a slash (or quotation marks, to prevent donation)
-                   ".+?)"                ; Matches the URL string
-                   "[\"']?\\)")))        ; Matches single, double, or no quotation mark followed by ')'
-
-(defn preprocess [file-path client-path code]
-  "Preprocess CSS to make it work as expected when injected."
-  ; Matches a url() function containing a possibly quoted relative path. Captures just the path in group 1.
-  (let [matches (distinct (re-seq relative-url-pattern code))
-        diff (files/relative client-path file-path)]
-    (reduce (fn [final [url-call path]]
-              (string/replace final url-call (str "url(\""  diff "/" path "\")")))
-            code
-            matches)))
-
 (behavior ::on-eval
           :triggers #{:eval
                       :eval.one}

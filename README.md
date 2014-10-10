@@ -4,7 +4,8 @@ Ready to run Stylus language plugin. Syntax highlighting is provided by the Styl
 
 ## Changelog
 * 0.0.2 - Initial release with rudimentary highlighting and live eval support
-* 0.0.3 - Fixes bugs caused by name change + comment highlighting
+* 0.0.3 - Single and multiline comment highlighting
+* 0.0.4 - Fixes bugs caused by name change
 
 ###License
 

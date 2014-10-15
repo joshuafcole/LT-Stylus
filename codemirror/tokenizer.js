@@ -105,8 +105,12 @@ var tokenize = Tokenizer.prototype = {};
 
 Tokenizer.prototype.nextToken = function(stream) {
   var stack = this.state.stack;
-  var loc = stack[stack.length - 1] || 'Root';
-  var token;
+  var loc = this.getLocation();
+  var token = this.comment(stream);
+  if(token) {
+    return token;
+  }
+
   if(stream.sol()) {
     token = this.indent(stream);
     if(token) {
@@ -122,16 +126,9 @@ Tokenizer.prototype.nextToken = function(stream) {
         }
       }
       else if(token.type === 'Outdent') {
-        this.state.stack.pop();
+        stack.pop();
       }
 
-      return token;
-    }
-  }
-
-  if(!token) {
-    token = this.comment(stream);
-    if(token) {
       return token;
     }
   }
@@ -154,6 +151,11 @@ Tokenizer.prototype.nextToken = function(stream) {
   }
 
   return token;
+};
+
+Tokenizer.prototype.getLocation = function() {
+  var stack = this.state.stack;
+  return stack[stack.length - 1] || 'Root';
 };
 
 tokenize.root = function(stream) {
@@ -207,12 +209,26 @@ tokenize.singleComment = function(stream) {
   return maybeToken('Comment', stream.match(pattern.singleComment, true));
 };
 
+pattern.multiComment = /^.*?(\*\/|\n|$)/;
 tokenize.multiComment = function(stream) {
+  var loc = this.getLocation();
+  if(loc !== 'MultiComment' && stream.match('/*', false)) {
+    loc = 'MultiComment';
+    this.state.stack.push(loc);
+  }
+
+  if(loc === 'MultiComment') {
+    var token = maybeToken('Comment', stream.match(pattern.multiComment, true));
+    if(token.text.indexOf('*/') !== -1) {
+      this.state.stack.pop();
+    }
+    return token;
+  }
 };
 
 tokenize.comment = function(stream) {
-  return tokenize.multiComment(stream) ||
-    tokenize.singleComment(stream);
+  return this.multiComment(stream) ||
+    this.singleComment(stream);
 };
 
 /*****************************************************************************\

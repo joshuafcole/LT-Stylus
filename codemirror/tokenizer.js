@@ -38,7 +38,7 @@ function join() {
 
 // Isolates the given regexp by ensuring a valid word boundary or separator prefix and suffix.
 function isolate(pattern) {
-  return join('(?:^| )', pattern, '(?= |;|$)');
+  return join('(?:^| )', pattern, '(?= |$|;|\/\/|\/*)');
 }
 
 // Returns a match group for each given alternative after escaping.
@@ -166,18 +166,6 @@ tokenize.root = function(stream) {
   return token;
 };
 
-tokenize.ruleBlock = function(stream) {
-  var token = this.rule(stream) || this.selector(stream);
-  if(token && token.type === 'Selector') {
-    this.state.stack.push('Selector');
-  }
-
-  return token;
-};
-
-tokenize.expressionBlock = function(stream) {
-  return this.expression(stream);
-};
 
 
 /*****************************************************************************\
@@ -284,11 +272,31 @@ tokenize.operator = function(stream) {
 /*****************************************************************************\
  * EXPRESSIONS
 \*****************************************************************************/
+pattern.fnCall = join(pattern.identifier, /\s*\(.*?\)/);
+tokenize.fnCall = function(stream) {
+  return maybeToken('fnCall', stream.match(pattern.fnCall, true));
+};
+
 tokenize.expression = function(stream) {
   return this.space(stream) ||
+    this.fnCall(stream) ||
     this.operator(stream) ||
     this.literal(stream);
 };
+
+
+tokenize.expressionBlock = function(stream) {
+  return this.expression(stream);
+};
+
+// pattern.setOperator = chooseRegExp(['=', ':=', '?=', '+=', '-=', '*=', '/=', '%=']);
+// pattern.varDec = join(pattern.identifier, /\s*/, pattern.setOperator);
+// tokenize.varDec = function(stream) {
+//   var match = stream.match(pattern.varDec, false);
+//   if(match) {
+
+//   }
+// };
 
 
 /*****************************************************************************\
@@ -332,13 +340,28 @@ pattern.attrSelector = join('\\[', pattern.property, pattern.attrOps, /.+?/, '\\
 pattern.selector = join(
   '(', '(', pattern.elSelector, '|\\*|&)?',
   chooseRegExp([pattern.idSelector, pattern.classSelector, pattern.pseudoSelector, pattern.attrSelector]), '*',
-  /(,|\s)*/, ')+');
+  /(,|\s)*/, ')+(?=\n|$)');
 tokenize.selector = function(stream) {
   var token = maybeToken('Selector', stream.match(isolate(pattern.selector), true));
   if(token && token.text) {
     return token;
   }
 };
+
+pattern.mixCall = join(pattern.property, /\s*\(.*?\)/);
+tokenize.mixCall = function(stream) {
+  return maybeToken('mixCall', stream.match(pattern.mixCall, true));
+};
+
+tokenize.ruleBlock = function(stream) {
+  var token = this.rule(stream) || this.selector(stream) || this.mixCall(stream);
+  if(token && token.type === 'Selector') {
+    this.state.stack.push('Selector');
+  }
+
+  return token;
+};
+
 
 /*****************************************************************************\
  * DEBUG

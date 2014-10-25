@@ -272,6 +272,7 @@ tokenize.operator = function(stream) {
 /*****************************************************************************\
  * EXPRESSIONS
 \*****************************************************************************/
+//@FIXME Will break on strings with parens. -.-
 pattern.fnCall = join(pattern.identifier, /\s*\(.*?\)/);
 tokenize.fnCall = function(stream) {
   return maybeToken('fnCall', stream.match(pattern.fnCall, true));
@@ -288,15 +289,6 @@ tokenize.expression = function(stream) {
 tokenize.expressionBlock = function(stream) {
   return this.expression(stream);
 };
-
-// pattern.setOperator = chooseRegExp(['=', ':=', '?=', '+=', '-=', '*=', '/=', '%=']);
-// pattern.varDec = join(pattern.identifier, /\s*/, pattern.setOperator);
-// tokenize.varDec = function(stream) {
-//   var match = stream.match(pattern.varDec, false);
-//   if(match) {
-
-//   }
-// };
 
 
 /*****************************************************************************\
@@ -348,6 +340,7 @@ tokenize.selector = function(stream) {
   }
 };
 
+//@FIXME Will break on strings with parens. -.-
 pattern.mixCall = join(pattern.property, /\s*\(.*?\)/);
 tokenize.mixCall = function(stream) {
   return maybeToken('mixCall', stream.match(pattern.mixCall, true));
@@ -361,7 +354,6 @@ tokenize.ruleBlock = function(stream) {
 
   return token;
 };
-
 
 /*****************************************************************************\
  * DEBUG

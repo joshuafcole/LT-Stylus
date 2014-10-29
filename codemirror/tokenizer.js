@@ -1,13 +1,18 @@
 /*****************************************************************************\
  * CONSTANTS
 \*****************************************************************************/
-//@FIXME require('./constants');
+//var constants = require('./constants');
 var constants = require('/home/josh/repos/light-table/Stylus_Language/codemirror/constants');
-
 
 /*****************************************************************************\
  * UTILITY FUNCTIONS
 \*****************************************************************************/
+
+// Returns the given value.
+function identity(x) {
+  return x;
+}
+
 // Converts an array into map for fast and easy indexing.
 function keySet(array) {
   var keys = {};
@@ -38,7 +43,7 @@ function join() {
 
 // Isolates the given regexp by ensuring a valid word boundary or separator prefix and suffix.
 function isolate(pattern) {
-  return join('(?:^| )', pattern, '(?= |$|;|\/\/|\/*)');
+  return join('(?:^| )', pattern, '(?= |$|;|\/\/|\/*|\\))');
 }
 
 // Returns a match group for each given alternative after escaping.
@@ -90,12 +95,15 @@ function getIndent(str, spacesPerTab) {
  * TOKENIZER
 \*****************************************************************************/
 function Tokenizer(state, opts) {
-  this.state = state = state || {};
-  this.opts = opts = opts || {};
+  state = state || {};
+  opts = opts || {};
 
-  // Selector / RuleBlock / Rule / ExprBlock / Expression
-  this.state.stack = state.stack || [];
-  this.state.indent = state.indent || 0;
+  this.state = {
+    stack: (state.stack || []).map(identity),
+    indent: state.indent || 0
+  };
+
+  this.opts = opts;
 
   this.opts.spacesPerTab = opts.spacesPerTab || 2;
 }
@@ -223,9 +231,10 @@ tokenize.comment = function(stream) {
  * LITERALS
 \*****************************************************************************/
 // (Number / Unit / String / Identifier / Hash / List)
+// @FIXME: Add explicit color support.
 tokenize.literal = function(stream) {
-  return tokenize.number(stream) ||
-    tokenize.unit(stream) ||
+  return tokenize.unit(stream) ||
+    tokenize.number(stream) ||
     tokenize.string(stream) ||
     tokenize.identifier(stream) ||
     tokenize.hash(stream) ||
@@ -285,14 +294,13 @@ tokenize.expression = function(stream) {
     this.literal(stream);
 
   if(token) {
-    if(token.type === 'operator') {
+    if(token.type === 'Operator') {
       if(token.text === '(') {
         this.state.stack.push('Expression');
       }
       else if(token.text === ')') {
         this.state.stack.pop();
       }
-      console.log(token, this.state.stack);
     }
     return token;
   }
@@ -371,41 +379,37 @@ tokenize.ruleBlock = function(stream) {
   return token;
 };
 
+
+module.exports = Tokenizer;
+
+
 /*****************************************************************************\
  * DEBUG
 \*****************************************************************************/
-var fs = require('fs');
-var CM = CodeMirror;
-var Stream = CM.StringStream;
+// var fs = require('fs');
+// var CM = CodeMirror;
+// var Stream = CM.StringStream;
 
-function readTokens(lines) {
-  var tokenizer = new Tokenizer();
-  var tokens = [];
-  for(var i = 0; i < lines.length; i++) {
-    var stream = new Stream(lines[i]);
-    while(!stream.eol()) {
-      var token = tokenizer.nextToken(stream);
-      if(!token || !token.text) {
-        console.log('STACK', tokenizer.state.stack);
-        console.log('TOKENS', tokens);
-        throw new Error('Failed to advance stream at: [' + i + '/' + stream.pos + '] "' +
-                        stream.string.slice(0, stream.pos) + ']|[' + stream.string.slice(stream.pos) + '"');
-      }
-      token.loc = tokenizer.getLocation();
-      tokens.push(token);
+// function readTokens(lines) {
+//   var tokenizer = new Tokenizer();
+//   var tokens = [];
+//   for(var i = 0; i < lines.length; i++) {
+//     var stream = new Stream(lines[i]);
+//     while(!stream.eol()) {
+//       var token = tokenizer.nextToken(stream);
+//       if(!token || !token.text) {
+//         console.log('STACK', tokenizer.state.stack);
+//         console.log('TOKENS', tokens);
+//         throw new Error('Failed to advance stream at: [' + i + '/' + stream.pos + '] "' +
+//                         stream.string.slice(0, stream.pos) + ']|[' + stream.string.slice(stream.pos) + '"');
+//       }
+//       token.loc = tokenizer.getLocation();
+//       tokens.push(token);
 
-    }
-  }
-  return tokens;
-}
+//     }
+//   }
+//   return tokens;
+// }
 
-var lines = fs.readFileSync('/home/josh/repos/light-table/cm-stylus/test/test.styl', {encoding: 'utf8'}).split('\n');
-readTokens(lines);
-
-
-// var tokenizer = new Tokenizer({stack: ['RuleBlock']});
-// tokenizer.nextToken(stream);
-
-// /*jshint expr:true*/
-// tokenizer.state;
-// [stream.pos, stream.string];
+// var lines = fs.readFileSync('/home/josh/repos/light-table/cm-stylus/test/test.styl', {encoding: 'utf8'}).split('\n');
+// readTokens(lines);

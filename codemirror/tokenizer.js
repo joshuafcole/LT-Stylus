@@ -349,9 +349,15 @@ tokenize.property = function(stream, greedy) {
   return token;
 };
 
-tokenize.ruleBody = tokenize.expression;
+pattern.ruleKeywords = isolate(/!important/);
+tokenize.ruleKeywords = function(stream) {
+  return maybeToken('Keyword', stream.match(pattern.ruleKeywords, true));
+};
+
 tokenize.ruleBody = function(stream) {
-  return this.expression(stream);
+  return this.space(stream) ||
+    this.ruleKeywords(stream) ||
+    this.expression(stream);
 };
 
 pattern.elSelector = pattern.property;

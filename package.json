@@ -1,0 +1,29 @@
+{
+  "name": "Stylus",
+  "version": "0.0.4",
+  "description": "Stylus language client for Light Table.",
+  "main": "stylus_compiled.js",
+  "dependencies": {
+    "stylus": "git+ssh://git@github.com:joshuafcole/stylus.git"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/joshuafcole/Stylus"
+  },
+  "keywords": [
+    "Stylus",
+    "Light",
+    "Table",
+    "client"
+  ],
+  "author": "Joshua M. Cole",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/joshuafcole/Stylus/issues"
+  },
+  "homepage": "https://github.com/joshuafcole/Stylus"
+}

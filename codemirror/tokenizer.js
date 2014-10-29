@@ -140,7 +140,7 @@ Tokenizer.prototype.nextToken = function(stream) {
   }
 
   token = this[name](stream) || this.space(stream);
-  console.log('Tokenizing', name, token);
+  //console.log('Tokenizing', name, token);
 
   if(stream.eol()) {
     switch(loc) {
@@ -273,18 +273,30 @@ tokenize.operator = function(stream) {
  * EXPRESSIONS
 \*****************************************************************************/
 //@FIXME Will break on strings with parens. -.-
-pattern.fnCall = join(pattern.identifier, /\s*\(.*?\)/);
+pattern.fnCall = join(pattern.identifier, /\s*(?=\()/);
 tokenize.fnCall = function(stream) {
-  return maybeToken('fnCall', stream.match(pattern.fnCall, true));
+  return maybeToken('FnCall', stream.match(pattern.fnCall, true));
 };
 
 tokenize.expression = function(stream) {
-  return this.space(stream) ||
+  var token = this.space(stream) ||
     this.fnCall(stream) ||
     this.operator(stream) ||
     this.literal(stream);
-};
 
+  if(token) {
+    if(token.type === 'operator') {
+      if(token.text === '(') {
+        this.state.stack.push('Expression');
+      }
+      else if(token.text === ')') {
+        this.state.stack.pop();
+      }
+      console.log(token, this.state.stack);
+    }
+    return token;
+  }
+};
 
 tokenize.expressionBlock = function(stream) {
   return this.expression(stream);
@@ -317,7 +329,7 @@ tokenize.rule = function(stream) {
 
 tokenize.ruleBody = tokenize.expression;
 tokenize.ruleBody = function(stream) {
-  return tokenize.expression(stream);
+  return this.expression(stream);
 };
 
 pattern.elSelector = pattern.property;
@@ -341,9 +353,13 @@ tokenize.selector = function(stream) {
 };
 
 //@FIXME Will break on strings with parens. -.-
-pattern.mixCall = join(pattern.property, /\s*\(.*?\)/);
+pattern.mixCall = join(pattern.property, /\s*(?=\()/);
 tokenize.mixCall = function(stream) {
-  return maybeToken('mixCall', stream.match(pattern.mixCall, true));
+  var token = maybeToken('MixCall', stream.match(pattern.mixCall, true));
+  if(token) {
+    this.state.stack.push('RuleBody');
+    return token;
+  }
 };
 
 tokenize.ruleBlock = function(stream) {
@@ -375,7 +391,7 @@ function readTokens(lines) {
         throw new Error('Failed to advance stream at: [' + i + '/' + stream.pos + '] "' +
                         stream.string.slice(0, stream.pos) + ']|[' + stream.string.slice(stream.pos) + '"');
       }
-
+      token.loc = tokenizer.getLocation();
       tokens.push(token);
 
     }

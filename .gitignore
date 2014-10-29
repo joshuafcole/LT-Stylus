@@ -1,1 +1,4 @@
 target/
+*_compiled*
+node_modules/
+.nrepl-port

@@ -1,8 +1,10 @@
-/*****************************************************************************\
- * CONSTANTS
-\*****************************************************************************/
-//var constants = require('./constants');
-var constants = require('/home/josh/repos/light-table/Stylus_Language/codemirror/constants');
+// DEBUG
+// __dirname = '/home/josh/repos/light-table/Stylus_Language/codemirror';
+// var constants = require(__dirname + '/constants');
+// END DEBUG
+
+
+var constants = require('./constants');
 
 /*****************************************************************************\
  * UTILITY FUNCTIONS
@@ -121,20 +123,30 @@ Tokenizer.prototype.nextToken = function(stream) {
 
   if(stream.sol()) {
     token = this.indent(stream);
+
     if(token) {
       if(token.type === 'Indent') {
         switch(loc) {
-          case 'RuleBlock':
-            stack.push('Expression');
+          case 'AtRuleBody':
+            stack.pop(); // Pops AtRuleBody
+            stack.push('RuleBlock');
             break;
           case 'Selector':
-            stack.pop();
+            stack.pop(); // Pops Selector
             stack.push('RuleBlock');
             break;
         }
-      }
-      else if(token.type === 'Outdent') {
-        stack.pop();
+      } else if(token.type === 'Outdent') {
+        for(var i = 0; i < token.levels; i++) {
+          stack.pop();
+        }
+      } else {
+        switch(loc) {
+          case 'RuleBody':
+          case 'AtRuleBody':
+            stack.pop();
+            break;
+        }
       }
 
       return token;
@@ -148,16 +160,7 @@ Tokenizer.prototype.nextToken = function(stream) {
   }
 
   token = this[name](stream) || this.space(stream);
-  loc = this.getLocation(); // Refresh location in case it has changed.
   //console.log('Tokenizing', name, token);
-
-  if(stream.eol()) {
-    switch(loc) {
-      case 'RuleBody':
-        stack.pop();
-        break;
-    }
-  }
 
   return token;
 };
@@ -167,8 +170,11 @@ Tokenizer.prototype.getLocation = function() {
   return stack[stack.length - 1] || 'Root';
 };
 
+// @FIXME: AtRule / Selector / FnDef / MixDef / VarDef / MixCall
 tokenize.root = function(stream) {
-  var token = this.selector(stream);
+  var token = this.atRule(stream) ||
+      this.selector(stream) ||
+      this.mixCall(stream);
   if(token && token.type === 'Selector') {
     this.state.stack.push('Selector');
   }
@@ -186,16 +192,29 @@ tokenize.space = function(stream) {
 };
 
 tokenize.indent = function(stream) {
-  var spc = this.space(stream);
-  if(!spc) { return; }
+  var spc = this.space(stream) || '';
+  if(!spc) {
+    if(this.getLocation() === 'Root') {
+      return;
+    }
+
+    // We have outdented all the way to Root scope.
+    this.state.indent = 0;
+    return {
+      type: 'Outdent',
+      levels: this.state.stack.length,
+      text: ''
+    };
+  }
 
   var oldIndent = this.state.indent;
   var newIndent = this.state.indent = getIndent(spc.text, this.opts.spacesPerTab);
+  var levels = (newIndent - oldIndent) / this.opts.spacesPerTab;
 
   if(newIndent > oldIndent) {
-    return {type: 'Indent', text: spc.text};
+    return {type: 'Indent', text: spc.text, levels: levels};
   } else if(newIndent < oldIndent) {
-    return {type: 'Outdent', text: spc.text};
+    return {type: 'Outdent', text: spc.text, levels: -levels};
   }
 
   return spc;
@@ -227,6 +246,7 @@ tokenize.comment = function(stream) {
   return this.multiComment(stream) ||
     this.singleComment(stream);
 };
+
 
 /*****************************************************************************\
  * LITERALS
@@ -279,6 +299,7 @@ tokenize.operator = function(stream) {
                     stream.match(chooseRegExp([pattern.namedOperator, pattern.operator]), true));
 };
 
+
 /*****************************************************************************\
  * EXPRESSIONS
 \*****************************************************************************/
@@ -298,8 +319,7 @@ tokenize.expression = function(stream) {
     if(token.type === 'Operator') {
       if(token.text === '(') {
         this.state.stack.push('Expression');
-      }
-      else if(token.text === ')') {
+      } else if(token.text === ')') {
         this.state.stack.pop();
       }
     }
@@ -317,22 +337,15 @@ tokenize.expressionBlock = function(stream) {
 \*****************************************************************************/
 var PROPERTY_MAP = keySet(constants.PROPERTIES);
 var NONSTANDARD_PROPERTY_MAP = keySet(constants.NONSTANDARD_PROPERTIES);
-pattern.property = /(-|\w)+/;
-tokenize.property = function(stream) {
-  // @TODO filter by set of valid properties.
+pattern.property = /(-|\w|%)+/;
+tokenize.property = function(stream, greedy) {
   var token = maybeToken('Property', stream.match(isolate(pattern.property), true));
   if(!token) { return; }
-  if(PROPERTY_MAP.hasOwnProperty(token.text) || NONSTANDARD_PROPERTY_MAP.hasOwnProperty(token.text)) {
-    return token;
+  if(!greedy && !PROPERTY_MAP.hasOwnProperty(token.text) && !NONSTANDARD_PROPERTY_MAP.hasOwnProperty(token.text)) {
+    stream.backUp(token.text.length);
+    return;
   }
-  stream.backUp(token.text.length);
-};
 
-tokenize.rule = function(stream) {
-  var token = this.property(stream);
-  if(token) {
-    this.state.stack.push('RuleBody');
-  }
   return token;
 };
 
@@ -350,12 +363,17 @@ pattern.pseudoSelector = join(/:{1,2}/, pattern.elSelector, /(\(.*?\))?/);
 pattern.attrOps = chooseRegExp(constants.SELECTOR_ATTR_OPS);
 pattern.attrSelector = join('\\[', pattern.property, pattern.attrOps, /.+?/, '\\]');
 
+var endSelector = '(?=\\n|$| \\{)';
 pattern.selector = join(
   '(', '(', pattern.elSelector, '|\\*|&)?',
   chooseRegExp([pattern.idSelector, pattern.classSelector, pattern.pseudoSelector, pattern.attrSelector]), '*',
-  /(,|\s)*/, ')+(?=\n|$)');
-tokenize.selector = function(stream) {
+  /(,|\s)*/, ')+' + endSelector);
+pattern.greedySelector = join(/.*/, endSelector);
+tokenize.selector = function(stream, greedy) {
   var token = maybeToken('Selector', stream.match(isolate(pattern.selector), true));
+  if(!token && greedy) {
+    token = maybeToken('Selector', stream.match(isolate(pattern.greedySelector), true));
+  }
   if(token && token.text) {
     return token;
   }
@@ -371,10 +389,28 @@ tokenize.mixCall = function(stream) {
   }
 };
 
+pattern.atRule = join('@', pattern.property);
+tokenize.atRule = function(stream) {
+  var token = maybeToken('AtRule', stream.match(pattern.atRule, true));
+  if(token) {
+    this.state.stack.push('AtRuleBody');
+    return token;
+  }
+};
+tokenize.atRuleBody = tokenize.ruleBody;
+
 tokenize.ruleBlock = function(stream) {
-  var token = this.rule(stream) || this.selector(stream) || this.mixCall(stream);
-  if(token && token.type === 'Selector') {
-    this.state.stack.push('Selector');
+  var token = this.atRule(stream) ||
+      this.property(stream) ||
+      this.selector(stream) ||
+      this.mixCall(stream) ||
+      this.property(stream, true);
+  if(token) {
+    if(token.type === 'Selector') {
+      this.state.stack.push('Selector');
+    } else if(token.type === 'Property' && !stream.eol()) {
+      this.state.stack.push('RuleBody');
+    }
   }
 
   return token;
@@ -388,8 +424,18 @@ module.exports = Tokenizer;
  * DEBUG
 \*****************************************************************************/
 // var fs = require('fs');
+// var Table = require(__dirname + '/../node_modules/easy-table');
 // var CM = CodeMirror;
 // var Stream = CM.StringStream;
+
+// function isTokenStuttered(token, tokens) {
+//   if(!token || !tokens.length) {
+//     return false;
+//   }
+
+//   var lastToken = tokens[tokens.length - 1];
+//   return (token.type === lastToken.type && token.text === lastToken.text);
+// }
 
 // function readTokens(lines) {
 //   var tokenizer = new Tokenizer();
@@ -398,7 +444,7 @@ module.exports = Tokenizer;
 //     var stream = new Stream(lines[i]);
 //     while(!stream.eol()) {
 //       var token = tokenizer.nextToken(stream);
-//       if(!token || !token.text) {
+//       if(!token || isTokenStuttered(token, tokens)) {
 //         console.log('STACK', tokenizer.state.stack);
 //         console.log('TOKENS', tokens);
 //         throw new Error('Failed to advance stream at: [' + i + '/' + stream.pos + '] "' +
@@ -413,5 +459,12 @@ module.exports = Tokenizer;
 // }
 
 // var lines = fs.readFileSync('/home/josh/repos/light-table/cm-stylus/test/test.styl', {encoding: 'utf8'}).split('\n');
-// readTokens(lines);
 
+// var t = new Table();
+// readTokens(lines).forEach(function(token) {
+//   t.cell('Type', token.type);
+//   t.cell('Loc', token.loc);
+//   t.cell('Text', '`' + token.text + '`');
+//   t.newRow();
+// });
+// console.log(t.toString());

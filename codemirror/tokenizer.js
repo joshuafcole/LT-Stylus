@@ -148,6 +148,7 @@ Tokenizer.prototype.nextToken = function(stream) {
   }
 
   token = this[name](stream) || this.space(stream);
+  loc = this.getLocation(); // Refresh location in case it has changed.
   //console.log('Tokenizing', name, token);
 
   if(stream.eol()) {
@@ -380,36 +381,37 @@ tokenize.ruleBlock = function(stream) {
 };
 
 
-module.exports = Tokenizer;
+//module.exports = Tokenizer;
 
 
 /*****************************************************************************\
  * DEBUG
 \*****************************************************************************/
-// var fs = require('fs');
-// var CM = CodeMirror;
-// var Stream = CM.StringStream;
+var fs = require('fs');
+var CM = CodeMirror;
+var Stream = CM.StringStream;
 
-// function readTokens(lines) {
-//   var tokenizer = new Tokenizer();
-//   var tokens = [];
-//   for(var i = 0; i < lines.length; i++) {
-//     var stream = new Stream(lines[i]);
-//     while(!stream.eol()) {
-//       var token = tokenizer.nextToken(stream);
-//       if(!token || !token.text) {
-//         console.log('STACK', tokenizer.state.stack);
-//         console.log('TOKENS', tokens);
-//         throw new Error('Failed to advance stream at: [' + i + '/' + stream.pos + '] "' +
-//                         stream.string.slice(0, stream.pos) + ']|[' + stream.string.slice(stream.pos) + '"');
-//       }
-//       token.loc = tokenizer.getLocation();
-//       tokens.push(token);
+function readTokens(lines) {
+  var tokenizer = new Tokenizer();
+  var tokens = [];
+  for(var i = 0; i < lines.length; i++) {
+    var stream = new Stream(lines[i]);
+    while(!stream.eol()) {
+      var token = tokenizer.nextToken(stream);
+      if(!token || !token.text) {
+        console.log('STACK', tokenizer.state.stack);
+        console.log('TOKENS', tokens);
+        throw new Error('Failed to advance stream at: [' + i + '/' + stream.pos + '] "' +
+                        stream.string.slice(0, stream.pos) + ']|[' + stream.string.slice(stream.pos) + '"');
+      }
+      token.loc = tokenizer.getLocation();
+      tokens.push(token);
 
-//     }
-//   }
-//   return tokens;
-// }
+    }
+  }
+  return tokens;
+}
 
-// var lines = fs.readFileSync('/home/josh/repos/light-table/cm-stylus/test/test.styl', {encoding: 'utf8'}).split('\n');
-// readTokens(lines);
+var lines = fs.readFileSync('/home/josh/repos/light-table/cm-stylus/test/test.styl', {encoding: 'utf8'}).split('\n');
+readTokens(lines);
+

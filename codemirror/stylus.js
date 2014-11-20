@@ -37,8 +37,6 @@
           return 'qualifier';
 
         case 'Property':
-          return 'property';
-
         case 'Identifier':
           return 'variable';
 
@@ -46,6 +44,7 @@
         case 'MixCall':
           return 'variable-2';
 
+        case 'Separator':
         case 'Operator':
           return 'operator';
 

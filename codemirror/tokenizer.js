@@ -176,13 +176,7 @@ Tokenizer.prototype.getLocation = function() {
 
 // @FIXME: AtRule / Selector / FnDef / MixDef / VarDef / MixCall
 tokenize.root = function(stream) {
-  var token = this.atRule(stream) ||
-      this.selector(stream) ||
-      this.fnCall(stream);
-  if(token && token.type === 'Selector') {
-    this.state.stack.push('Selector');
-  }
-  return token;
+  return this.ruleBlock(stream);
 };
 
 

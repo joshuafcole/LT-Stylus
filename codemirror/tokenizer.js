@@ -135,6 +135,9 @@ Tokenizer.prototype.nextToken = function(stream) {
             stack.pop(); // Pops Selector
             stack.push('RuleBlock');
             break;
+          case 'FnParams':
+            stack.pop(); // Pops Function
+            stack.push('FnBlock');
         }
       } else if(token.type === 'Outdent') {
         for(var i = 0; i < token.levels; i++) {
@@ -144,6 +147,7 @@ Tokenizer.prototype.nextToken = function(stream) {
         switch(loc) {
           case 'RuleBody':
           case 'AtRuleBody':
+          case 'FnParams':
             stack.pop();
             break;
         }
@@ -174,7 +178,7 @@ Tokenizer.prototype.getLocation = function() {
 tokenize.root = function(stream) {
   var token = this.atRule(stream) ||
       this.selector(stream) ||
-      this.mixCall(stream);
+      this.fnCall(stream);
   if(token && token.type === 'Selector') {
     this.state.stack.push('Selector');
   }
@@ -247,6 +251,10 @@ tokenize.comment = function(stream) {
     this.singleComment(stream);
 };
 
+tokenize.separator = function(stream) {
+  return maybeToken('Separator', stream.match(';', true));
+};
+
 
 /*****************************************************************************\
  * LITERALS
@@ -303,17 +311,29 @@ tokenize.operator = function(stream) {
 /*****************************************************************************\
  * EXPRESSIONS
 \*****************************************************************************/
-//@FIXME Will break on strings with parens. -.-
 pattern.fnCall = join(pattern.identifier, /\s*(?=\()/);
 tokenize.fnCall = function(stream) {
-  return maybeToken('FnCall', stream.match(pattern.fnCall, true));
+  var token = maybeToken('FnCall', stream.match(pattern.fnCall, true));
+  if(token) {
+    this.state.stack.push('FnParams');
+    return token;
+  }
+};
+
+tokenize.fnParams = function(stream) {
+  return this.expression(stream);
+};
+
+tokenize.fnBlock = function(stream) {
+  return this.ruleBlock(stream);
 };
 
 tokenize.expression = function(stream) {
   var token = this.space(stream) ||
     this.fnCall(stream) ||
     this.operator(stream) ||
-    this.literal(stream);
+    this.literal(stream) ||
+    this.separator(stream);
 
   if(token) {
     if(token.type === 'Operator') {
@@ -385,16 +405,6 @@ tokenize.selector = function(stream, greedy) {
   }
 };
 
-//@FIXME Will break on strings with parens. -.-
-pattern.mixCall = join(pattern.property, /\s*(?=\()/);
-tokenize.mixCall = function(stream) {
-  var token = maybeToken('MixCall', stream.match(pattern.mixCall, true));
-  if(token) {
-    this.state.stack.push('RuleBody');
-    return token;
-  }
-};
-
 pattern.atRule = join('@', pattern.property);
 tokenize.atRule = function(stream) {
   var token = maybeToken('AtRule', stream.match(pattern.atRule, true));
@@ -409,7 +419,7 @@ tokenize.ruleBlock = function(stream) {
   var token = this.atRule(stream) ||
       this.property(stream) ||
       this.selector(stream) ||
-      this.mixCall(stream) ||
+      this.fnCall(stream) ||
       this.property(stream, true);
   if(token) {
     if(token.type === 'Selector') {
@@ -417,6 +427,8 @@ tokenize.ruleBlock = function(stream) {
     } else if(token.type === 'Property' && !stream.eol()) {
       this.state.stack.push('RuleBody');
     }
+  } else {
+    token = this.expression(stream);
   }
 
   return token;

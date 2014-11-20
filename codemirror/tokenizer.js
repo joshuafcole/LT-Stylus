@@ -1,10 +1,14 @@
+var debug = false;
+var constants;
+
 // DEBUG
-// __dirname = '/home/josh/repos/light-table/Stylus_Language/codemirror';
-// var constants = require(__dirname + '/constants');
+if(debug) {
+  __dirname = '/home/josh/repos/light-table/Stylus_Language/codemirror';
+  constants = require(__dirname + '/constants');
+} else {
+  constants = require('./constants');
+}
 // END DEBUG
-
-
-var constants = require('./constants');
 
 /*****************************************************************************\
  * UTILITY FUNCTIONS
@@ -74,7 +78,7 @@ function chooseRegExp(options, unsafe) {
 
 
 function maybeToken(type, match, meta) {
-  if(match) {
+  if(match && match[0]) {
     var result = {
       type: type,
       text: match[0]
@@ -164,6 +168,20 @@ Tokenizer.prototype.nextToken = function(stream) {
   }
 
   token = this[name](stream) || this.space(stream);
+
+  //@NOTE; Traditional stack navigation, conflicts with indentation based system.
+//   if(token.type === 'Separator') {
+//     switch(loc) {
+//       case 'Selector':
+//       case 'AtRuleBody':
+//       case 'FnCall':
+//         stack.pop();
+//         stack.push('RuleBlock');
+//         break;
+//       case 'RuleBody':
+//         stack.pop();
+//     }
+//   }
   //console.log('Tokenizing', name, token);
 
   return token;
@@ -246,7 +264,7 @@ tokenize.comment = function(stream) {
 };
 
 tokenize.separator = function(stream) {
-  return maybeToken('Separator', stream.match(';', true));
+  return maybeToken('Separator', stream.match(/;/, true));
 };
 
 
@@ -327,6 +345,7 @@ tokenize.expression = function(stream) {
     this.fnCall(stream) ||
     this.operator(stream) ||
     this.literal(stream) ||
+    this.ruleKeywords(stream) ||
     this.separator(stream);
 
   if(token) {
@@ -383,20 +402,17 @@ pattern.pseudoSelector = join(/:{1,2}/, pattern.elSelector, /(\(.*?\))?/);
 pattern.attrOps = chooseRegExp(constants.SELECTOR_ATTR_OPS);
 pattern.attrSelector = join('\\[', pattern.property, pattern.attrOps, /.+?/, '\\]');
 
-var endSelector = '(?=\\n|$| \\{)';
+var endSelector = '(?=\\n|$|\\{)';
 pattern.selector = join(
   '(', '(', pattern.elSelector, '|\\*|&)?',
   chooseRegExp([pattern.idSelector, pattern.classSelector, pattern.pseudoSelector, pattern.attrSelector]), '*',
-  /(,|\s)*/, ')+' + endSelector);
+  /(,|\s)*/, ')+', endSelector);
 pattern.greedySelector = join(/.*/, endSelector);
+
 tokenize.selector = function(stream, greedy) {
-  var token = maybeToken('Selector', stream.match(isolate(pattern.selector), true));
-  if(!token && greedy) {
-    token = maybeToken('Selector', stream.match(isolate(pattern.greedySelector), true));
-  }
-  if(token && token.text) {
-    return token;
-  }
+  return maybeToken('Selector', stream.match(isolate(pattern.selector), true)) ||
+      (greedy && maybeToken('Selector', stream.match(isolate(pattern.greedySelector), true))) ||
+      maybeToken('Separator', stream.match(/\{/, true));
 };
 
 pattern.atRule = join('@', pattern.property);
@@ -422,61 +438,66 @@ tokenize.ruleBlock = function(stream) {
       this.state.stack.push('RuleBody');
     }
   } else {
-    token = this.expression(stream);
+    token = this.expression(stream) ||
+      maybeToken('Separator', stream.match(/\}/, true));
   }
 
   return token;
 };
 
 
-module.exports = Tokenizer;
+if(!debug) {
+  module.exports = Tokenizer;
+}
 
 
 /*****************************************************************************\
  * DEBUG
 \*****************************************************************************/
-// var fs = require('fs');
-// var Table = require(__dirname + '/../node_modules/easy-table');
-// var CM = CodeMirror;
-// var Stream = CM.StringStream;
+if(debug) {
+  var fs = require('fs');
+  var Table = require(__dirname + '/../node_modules/easy-table');
+  var CM = CodeMirror;
+  var Stream = CM.StringStream;
 
-// function isTokenStuttered(token, tokens) {
-//   if(!token || !tokens.length) {
-//     return false;
-//   }
+  function isTokenStuttered(token, tokens) {
+    if(!token || !tokens.length) {
+      return false;
+    }
 
-//   var lastToken = tokens[tokens.length - 1];
-//   return (token.type === lastToken.type && token.text === lastToken.text);
-// }
+    var lastToken = tokens[tokens.length - 1];
+    return (token.type === lastToken.type && token.text === lastToken.text);
+  }
 
-// function readTokens(lines) {
-//   var tokenizer = new Tokenizer();
-//   var tokens = [];
-//   for(var i = 0; i < lines.length; i++) {
-//     var stream = new Stream(lines[i]);
-//     while(!stream.eol()) {
-//       var token = tokenizer.nextToken(stream);
-//       if(!token || isTokenStuttered(token, tokens)) {
-//         console.log('STACK', tokenizer.state.stack);
-//         console.log('TOKENS', tokens);
-//         throw new Error('Failed to advance stream at: [' + i + '/' + stream.pos + '] "' +
-//                         stream.string.slice(0, stream.pos) + ']|[' + stream.string.slice(stream.pos) + '"');
-//       }
-//       token.loc = tokenizer.getLocation();
-//       tokens.push(token);
+  function readTokens(lines) {
+    var tokenizer = new Tokenizer();
+    var tokens = [];
+    for(var i = 0; i < lines.length; i++) {
+      var stream = new Stream(lines[i]);
+      while(!stream.eol()) {
+        var token = tokenizer.nextToken(stream);
+        if(!token || isTokenStuttered(token, tokens)) {
+          console.log('STACK', tokenizer.state.stack);
+          console.log('TOKENS', tokens);
+          throw new Error('Failed to advance stream at: [' + i + '/' + stream.pos + '] "' +
+                          stream.string.slice(0, stream.pos) + ']|[' + stream.string.slice(stream.pos) + '"');
+        }
+        token.loc = tokenizer.getLocation();
+        tokens.push(token);
 
-//     }
-//   }
-//   return tokens;
-// }
+      }
+    }
+    return tokens;
+  }
 
-// var lines = fs.readFileSync('/home/josh/repos/light-table/cm-stylus/test/test.styl', {encoding: 'utf8'}).split('\n');
+  var lines = fs.readFileSync('/home/josh/repos/light-table/cm-stylus/test/test.styl', {encoding: 'utf8'}).split('\n');
 
-// var t = new Table();
-// readTokens(lines).forEach(function(token) {
-//   t.cell('Type', token.type);
-//   t.cell('Loc', token.loc);
-//   t.cell('Text', '`' + token.text + '`');
-//   t.newRow();
-// });
-// console.log(t.toString());
+  var t = new Table();
+  readTokens(lines).forEach(function(token) {
+    t.cell('Type', token.type);
+    t.cell('Loc', token.loc);
+    t.cell('Text', '`' + token.text + '`');
+    t.newRow();
+  });
+  console.log(t.toString());
+}
